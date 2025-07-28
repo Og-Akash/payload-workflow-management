@@ -1,10 +1,12 @@
+import payloadConfig from '@/payload.config'
 import type { CollectionConfig } from 'payload'
+
 
 export const Contract: CollectionConfig = {
   slug: 'contracts',
   admin: {
     useAsTitle: 'title',
-     components: {
+    components: {
       // beforeListTable: ['./components/WorkflowTab.tsx'],
     },
   },

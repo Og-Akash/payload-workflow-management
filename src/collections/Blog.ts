@@ -1,12 +1,12 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, PayloadRequest } from 'payload'
 
 export const Blog: CollectionConfig = {
   slug: 'blog',
   admin: {
     useAsTitle: 'title',
     components: {
-      beforeListTable: ["/components/WorkflowTab"]
-    }
+      beforeListTable: ['/components/WorkflowTab'],
+    },
   },
   access: {
     read: () => true,
@@ -41,7 +41,7 @@ export const Blog: CollectionConfig = {
       options: [
         { label: 'Draft', value: 'draft' },
         { label: 'In Review', value: 'in-review' },
-        { label: 'Published', value: 'published' },
+        { label: 'Published', value: 'published' }, 
         { label: 'Rejected', value: 'rejected' },
       ],
     },

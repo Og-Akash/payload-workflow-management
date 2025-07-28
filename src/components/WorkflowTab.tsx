@@ -22,9 +22,11 @@ export const WorkflowTab = () => {
     
     try {
       setLoading(true)
-      const response = await fetch(`/api/workflows/status/${docId}?collection=${collectionSlug}`)
+      const response = await fetch(`/api/detail/status/${docId}`)
+      
       if (response.ok) {
         const data = await response.json()
+        console.log("req data: ",data)
         setWorkflowData(data)
       }
     } catch (error) {

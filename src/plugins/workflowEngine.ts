@@ -1,8 +1,17 @@
-import type { Config, Plugin } from 'payload'
-import type { CollectionConfig } from 'payload'
+import { Blog, User, WorkflowLog } from '@/payload-types'
+import type {
+  Config,
+  Plugin,
+  CollectionBeforeChangeHook,
+  CollectionAfterChangeHook,
+  PayloadHandler,
+  CollectionSlug,
+  PayloadRequest,
+  BasePayload,
+} from 'payload'
 
 interface WorkflowEngineOptions {
-  collections?: string[] // Collections to enable workflows for
+  collections?: string[]
 }
 
 export const workflowEngine = (options: WorkflowEngineOptions = {}): Plugin => {
@@ -10,52 +19,21 @@ export const workflowEngine = (options: WorkflowEngineOptions = {}): Plugin => {
     return {
       ...config,
       collections: config.collections?.map((collection) => {
-        const collectionConfig = collection as CollectionConfig
-        
-        // Only add workflow features to specified collections
-        if (options.collections?.includes(collectionConfig.slug) || 
-            collectionConfig.slug === 'blog' || 
-            collectionConfig.slug === 'contracts') {
-          
-          return {
-            ...collectionConfig,
-            hooks: {
-              ...collectionConfig.hooks,
-              beforeChange: [
-                ...(collectionConfig.hooks?.beforeChange || []),
-                workflowBeforeChangeHook,
-              ],
-              afterChange: [
-                ...(collectionConfig.hooks?.afterChange || []),
-                workflowAfterChangeHook,
-              ],
-            },
-            // Add custom admin components for workflow UI
-            admin: {
-              ...collectionConfig.admin,
-              components: {
-                ...collectionConfig.admin?.components,
-                views: {
-                  ...collectionConfig.admin?.components?.views,
-                  edit: {
-                    ...collectionConfig.admin?.components?.views?.edit,
-                    tabs: [
-                      ...(collectionConfig.admin?.components?.beforeListTable || []),
-                      {
-                        label: 'Workflow',
-                        path: '/components/WorkflowTab',
-                      },
-                    ],
-                  },
-                },
-              },
-            },
-          }
+        const isTarget =
+          options.collections?.includes(collection.slug) ||
+          ['blog', 'contracts'].includes(collection.slug)
+        console.log('isTarget', isTarget)
+
+        if (!isTarget) return collection
+
+        return {
+          ...collection,
+          hooks: {
+            beforeChange: [...(collection.hooks?.beforeChange || []), workflowBeforeChangeHook],
+            afterChange: [...(collection.hooks?.afterChange || []), workflowAfterChangeHook],
+          },
         }
-        
-        return collectionConfig
       }),
-      // Add custom endpoints
       endpoints: [
         ...(config.endpoints || []),
         {
@@ -66,140 +44,389 @@ export const workflowEngine = (options: WorkflowEngineOptions = {}): Plugin => {
         {
           path: '/workflows/status/:docId',
           method: 'get',
-          handler: getWorkflowStatusHandler,
+          handler: getWorkflowStatusHandler, // Use separate function
         },
       ],
     }
   }
 }
 
-// Workflow hooks
-const workflowBeforeChangeHook = async ({ data, req, operation, originalDoc }) => {
+const workflowBeforeChangeHook: CollectionBeforeChangeHook = async ({
+  data,
+  req,
+  operation,
+  collection,
+}) => {
   const { payload, user } = req
-  
-  console.log(`[Workflow Engine] BeforeChange triggered for ${req.collection?.config?.slug}`)
-  
-  // Skip if no user or if it's a workflow log (prevent infinite loops)
-  if (!user || req.collection?.config?.slug === 'workflowLogs') {
+
+  if (!user || collection?.slug === 'workflowLogs') {
+    console.warn(
+      '[Workflow Engine] Skipping beforeChange due to missing user or workflowLogs collection.',
+    )
     return data
   }
 
   try {
-    // Find applicable workflows for this collection
     const workflows = await payload.find({
       collection: 'workflows',
       where: {
-        and: [
-          { targetCollection: { equals: req.collection?.config?.slug } },
-          { isActive: { equals: true } },
-        ],
+        and: [{ targetCollection: { equals: collection?.slug } }, { isActive: { equals: true } }],
       },
     })
 
-    if (workflows.docs.length > 0) {
-      const workflow = workflows.docs[0]
-      
-      // If this is a new document, initialize workflow
-      if (operation === 'create') {
-        data.workflowStatus = 'in-progress'
-        data.currentWorkflowStep = workflow.steps[0]?.order?.toString()
-        
-        console.log(`[Workflow Engine] Initialized workflow for new document`)
-      }
-      
-      // Evaluate conditions for next steps
-      await evaluateWorkflowConditions(data, workflow, payload, user, operation)
+    if (workflows.docs.length === 0) return data
+
+    const workflow = workflows.docs[0]
+
+    if (operation === 'create') {
+      data.workflowStatus = 'in-progress'
+      data.currentWorkflowStep = workflow.steps?.[0]?.order?.toString() || '1'
     }
+
+    await evaluateWorkflowConditions(data, workflow, payload, user, operation)
   } catch (error) {
-    console.error('[Workflow Engine] Error in beforeChange hook:', error)
+    console.error('[Workflow Engine] Error in beforeChange:', error)
   }
 
   return data
 }
 
-const workflowAfterChangeHook = async ({ doc, req, operation, previousDoc }) => {
+const workflowAfterChangeHook: CollectionAfterChangeHook = async ({
+  doc,
+  req,
+  operation,
+  previousDoc,
+  collection,
+}) => {
   const { payload, user } = req
-  
-  // Skip if no user or if it's a workflow log
-  if (!user || req.collection?.config?.slug === 'workflowLogs') {
+
+  // Skip workflow logs collection and check user
+  if (!user || collection?.slug === 'workflowLogs') {
+    console.log(
+      `[Workflow Engine] Skipping afterChange for ${collection?.slug}, user: ${user ? 'exists' : 'missing'}`
+    )
     return doc
   }
 
   try {
+    console.log(`[Workflow Engine] Processing afterChange for ${collection?.slug}, operation: ${operation}`)
+    
     // Find applicable workflows
     const workflows = await payload.find({
       collection: 'workflows',
       where: {
         and: [
-          { targetCollection: { equals: req.collection?.config?.slug } },
-          { isActive: { equals: true } },
+          { targetCollection: { equals: collection?.slug } }, 
+          { isActive: { equals: true } }
         ],
       },
     })
 
-    if (workflows.docs.length > 0) {
-      const workflow = workflows.docs[0]
-      
-      // Log workflow action
+    if (workflows.docs.length === 0) {
+      console.log(`[Workflow Engine] No active workflows found for ${collection?.slug}`)
+      return doc
+    }
+
+    const workflow = workflows.docs[0]
+    console.log(`[Workflow Engine] Found workflow: ${workflow.name}`)
+
+    // ✅ Determine the actual action based on status changes
+    const actionData = determineWorkflowAction(doc, previousDoc, operation, collection?.slug)
+    
+    if (!actionData) {
+      console.log('[Workflow Engine] No significant workflow action detected')
+      return doc
+    }
+
+    console.log(`[Workflow Engine] Detected action: ${actionData.action}`)
+    // Create log entry with the detected action
+    try {
       await logWorkflowAction({
         workflowId: workflow.id,
-        documentId: doc.id,
-        collection: req.collection?.config?.slug,
+        documentId: doc.id.toString(),
+        collection: collection?.slug || 'unknown',
         stepId: doc.currentWorkflowStep || 'initial',
-        stepName: 'Document Updated',
-        action: operation === 'create' ? 'started' : 'approved',
+        stepName: actionData.stepName,
+        action: actionData.action as "approved" | "rejected" | "commented" | "started" | "completed" | "escalated",
         user: user.id,
+        comment: actionData.comment,
         payload,
       })
 
-      // Send notification (e.g. Console logs)
+      // Send notification
       await sendWorkflowNotification({
         workflow,
         document: doc,
-        action: operation === 'create' ? 'started' : 'updated',
+        action: actionData.action,
         user,
         payload,
       })
+      
+      console.log(`[Workflow Engine] ✅ Successfully logged ${actionData.action} action for document ${doc.id}`)
+      
+    } catch (logError) {
+      console.error('[Workflow Engine] ❌ Failed to log workflow action:', logError)
     }
+
   } catch (error) {
-    console.error('[Workflow Engine] Error in afterChange hook:', error)
+    console.error('[Workflow Engine] ❌ Error in afterChange hook:', error)
   }
 
   return doc
 }
 
-// Helper functions
-async function evaluateWorkflowConditions(data: any, workflow: any, payload: any, user: any, operation: string) {
-  const currentStepOrder = parseInt(data.currentWorkflowStep || '1')
-  const currentStep = workflow.steps.find(step => step.order === currentStepOrder)
+// ✅ Function to determine the actual workflow action based on document changes
+function determineWorkflowAction(
+  doc: any, 
+  previousDoc: any, 
+  operation: string, 
+  collectionSlug?: string
+): { action: string; stepName: string; comment?: string } | null {
   
-  if (!currentStep) return
-  
-  // Check if conditions are met
-  const conditionsMet = currentStep.conditions?.every(condition => {
-    const fieldValue = data[condition.field]
-    
-    switch (condition.operator) {
-      case 'equals':
-        return fieldValue == condition.value
-      case 'not_equals':
-        return fieldValue != condition.value
-      case 'greater_than':
-        return parseFloat(fieldValue) > parseFloat(condition.value)
-      case 'less_than':
-        return parseFloat(fieldValue) < parseFloat(condition.value)
-      case 'contains':
-        return String(fieldValue).includes(condition.value)
-      default:
-        return true
+  // For new documents
+  if (operation === 'create') {
+    return {
+      action: 'started',
+      stepName: 'Workflow Initiated',
+      comment: 'Document created and workflow started'
     }
-  }) ?? true
+  }
+
+  // For updates, check what actually changed
+  if (operation === 'update' && previousDoc) {
+    
+    // Check if workflow status changed
+    if (doc.workflowStatus !== previousDoc.workflowStatus) {
+      
+      switch (doc.workflowStatus) {
+        case 'completed':
+          return {
+            action: 'completed',
+            stepName: 'Workflow Completed',
+            comment: 'All workflow steps completed successfully'
+          }
+        
+        case 'rejected':
+          return {
+            action: 'rejected',
+            stepName: getCurrentStepName(doc, previousDoc),
+            comment: 'Document rejected during workflow process'
+          }
+        
+        case 'in-progress':
+          // Check if step changed (approval/progression)
+          if (doc.currentWorkflowStep !== previousDoc.currentWorkflowStep) {
+            return {
+              action: 'approved',
+              stepName: getCurrentStepName(doc, previousDoc),
+              comment: `Advanced from step ${previousDoc.currentWorkflowStep} to ${doc.currentWorkflowStep}`
+            }
+          }
+          break
+      }
+    }
+
+    // Check if workflow step changed (without status change)
+    if (doc.currentWorkflowStep !== previousDoc.currentWorkflowStep) {
+      return {
+        action: 'approved',
+        stepName: getCurrentStepName(doc, previousDoc),
+        comment: `Workflow step progressed from ${previousDoc.currentWorkflowStep || 0} to ${doc.currentWorkflowStep}`
+      }
+    }
+
+    // Check collection-specific status changes
+    const collectionAction = getCollectionSpecificAction(doc, previousDoc, collectionSlug)
+    if (collectionAction) {
+      return collectionAction
+    }
+
+    // Generic document update (non-workflow related)
+    return {
+      action: 'commented',
+      stepName: getCurrentStepName(doc, previousDoc) || 'Document Updated',
+      comment: 'Document content updated'
+    }
+  }
+
+  return null // No significant workflow action
+}
+
+// ✅ Helper function to get current step name
+function getCurrentStepName(doc: any, previousDoc: any): string {
+  const currentStep = doc.currentWorkflowStep || previousDoc?.currentWorkflowStep
+  
+  if (currentStep) {
+    return `Step ${currentStep}`
+  }
+  
+  return 'Unknown Step'
+}
+
+// ✅ Function to detect collection-specific workflow actions
+function getCollectionSpecificAction(
+  doc: any, 
+  previousDoc: any, 
+  collectionSlug?: string
+): { action: string; stepName: string; comment?: string } | null {
+  
+  switch (collectionSlug) {
+    case 'blog':
+      return getBlogWorkflowAction(doc, previousDoc)
+    
+    case 'contracts':
+      return getContractWorkflowAction(doc, previousDoc)
+    
+    default:
+      return null
+  }
+}
+
+// ✅ Blog-specific workflow action detection
+function getBlogWorkflowAction(
+  doc: any, 
+  previousDoc: any
+): { action: string; stepName: string; comment?: string } | null {
+  
+  // Check blog status changes
+  if (doc.status !== previousDoc.status) {
+    switch (doc.status) {
+      case 'published':
+        return {
+          action: 'approved',
+          stepName: 'Blog Publication',
+          comment: `Blog status changed from '${previousDoc.status}' to 'published'`
+        }
+      
+      case 'rejected':
+        return {
+          action: 'rejected', 
+          stepName: 'Blog Review',
+          comment: `Blog rejected - status changed from '${previousDoc.status}' to 'rejected'`
+        }
+      
+      case 'in-review':
+        return {
+          action: 'started',
+          stepName: 'Blog Review Process',
+          comment: `Blog submitted for review - status changed to 'in-review'`
+        }
+      
+      case 'draft':
+        return {
+          action: 'commented',
+          stepName: 'Blog Draft',
+          comment: `Blog moved back to draft status`
+        }
+    }
+  }
+
+  // Check priority changes (could trigger workflow escalation)
+  if (doc.priority !== previousDoc.priority) {
+    if (doc.priority === 'critical') {
+      return {
+        action: 'escalated',
+        stepName: 'Priority Escalation',
+        comment: `Blog priority escalated to '${doc.priority}'`
+      }
+    }
+  }
+
+  return null
+}
+
+// ✅ Contract-specific workflow action detection  
+function getContractWorkflowAction(
+  doc: any, 
+  previousDoc: any
+): { action: string; stepName: string; comment?: string } | null {
+  
+  // Check contract status changes
+  if (doc.status !== previousDoc.status) {
+    switch (doc.status) {
+      case 'approved':
+        return {
+          action: 'approved',
+          stepName: 'Contract Approval',
+          comment: `Contract approved - status changed from '${previousDoc.status}' to 'approved'`
+        }
+      
+      case 'rejected':
+        return {
+          action: 'rejected',
+          stepName: 'Contract Review',
+          comment: `Contract rejected - status changed from '${previousDoc.status}' to 'rejected'`
+        }
+      
+      case 'legal-review':
+        return {
+          action: 'started',
+          stepName: 'Legal Review Process',
+          comment: `Contract sent for legal review`
+        }
+      
+      case 'under-review':
+        return {
+          action: 'started',
+          stepName: 'Contract Review Process',
+          comment: `Contract submitted for review`
+        }
+    }
+  }
+
+  // Check amount changes (could trigger different approval levels)
+  if (doc.amount !== previousDoc.amount) {
+    if (doc.amount > 50000 && previousDoc.amount <= 50000) {
+      return {
+        action: 'escalated',
+        stepName: 'Executive Approval Required',
+        comment: `Contract amount increased to $${doc.amount}, requiring executive approval`
+      }
+    }
+  }
+
+  return null
+}
+
+// Helper functions
+async function evaluateWorkflowConditions(
+  data: any,
+  workflow: any,
+  payload: any,
+  user: any,
+  operation: string,
+) {
+  const currentStepOrder = parseInt(data.currentWorkflowStep || '1')
+  const currentStep = workflow.steps.find((step: any) => step.order === currentStepOrder)
+
+  if (!currentStep) return
+
+  // Check if conditions are met
+  const conditionsMet =
+    currentStep.conditions?.every((condition: any) => {
+      const fieldValue = data[condition.field]
+
+      switch (condition.operator) {
+        case 'equals':
+          return fieldValue == condition.value
+        case 'not_equals':
+          return fieldValue != condition.value
+        case 'greater_than':
+          return parseFloat(fieldValue) > parseFloat(condition.value)
+        case 'less_than':
+          return parseFloat(fieldValue) < parseFloat(condition.value)
+        case 'contains':
+          return String(fieldValue).includes(condition.value)
+        default:
+          return true
+      }
+    }) ?? true
 
   console.log(`[Workflow Engine] Conditions met: ${conditionsMet} for step ${currentStepOrder}`)
-  
+
   // If conditions are met and user has permission, advance to next step
-  if (conditionsMet && await checkStepPermission(currentStep, user, payload)) {
-    const nextStep = workflow.steps.find(step => step.order === currentStepOrder + 1)
+  if (conditionsMet && (await checkStepPermission(currentStep, user, payload))) {
+    const nextStep = workflow.steps.find((step: any) => step.order === currentStepOrder + 1)
     if (nextStep) {
       data.currentWorkflowStep = nextStep.order.toString()
       console.log(`[Workflow Engine] Advanced to step ${nextStep.order}: ${nextStep.stepName}`)
@@ -221,15 +448,15 @@ async function checkStepPermission(step: any, user: any, payload: any): Promise<
 }
 
 async function logWorkflowAction(logData: {
-  workflowId: string
+  workflowId: number
   documentId: string
   collection: string
   stepId: string
   stepName: string
-  action: string
-  user: string
+  action: "approved" | "rejected" | "commented" | "started" | "completed" | "escalated"
+  user: number | User
   comment?: string
-  payload: any
+  payload: BasePayload
 }) {
   try {
     await logData.payload.create({
@@ -273,188 +500,135 @@ async function sendWorkflowNotification(params: {
 }
 
 // Custom API endpoints
-const triggerWorkflowHandler = async (req: any, res: any) => {
-  try {
-    const { documentId, collection, stepId, action, comment } = req.body
-    const { payload, user } = req
-    
-    if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' })
-    }
-    
-    // Find the document
-    const doc = await payload.findByID({
-      collection,
-      id: documentId,
-    })
-    
-    if (!doc) {
-      return res.status(404).json({ error: 'Document not found' })
-    }
-    
-    // Find applicable workflow
-    const workflows = await payload.find({
-      collection: 'workflows',
-      where: {
-        targetCollection: { equals: collection },
-        isActive: { equals: true },
-      },
-    })
-    
-    if (workflows.docs.length === 0) {
-      return res.status(404).json({ error: 'No active workflow found for this collection' })
-    }
-    
-    const workflow = workflows.docs[0]
-    const step = workflow.steps.find(s => s.order.toString() === stepId)
-    
-    if (!step) {
-      return res.status(404).json({ error: 'Workflow step not found' })
-    }
-    
-    // Check permissions
-    const hasPermission = await checkStepPermission(step, user, payload)
-    if (!hasPermission) {
-      return res.status(403).json({ error: 'Insufficient permissions for this workflow step' })
-    }
-    
-    // Process the workflow action
-    let updateData: any = {}
-    
-    if (action === 'approve') {
-      const nextStep = workflow.steps.find(s => s.order === step.order + 1)
-      if (nextStep) {
-        updateData.currentWorkflowStep = nextStep.order.toString()
-      } else {
-        updateData.workflowStatus = 'completed'
-        updateData.currentWorkflowStep = null
-      }
-    } else if (action === 'reject') {
-      updateData.workflowStatus = 'rejected'
-      updateData.currentWorkflowStep = null
-    }
-    
-    // Update document
-    const updatedDoc = await payload.update({
-      collection,
-      id: documentId,
-      data: updateData,
-    })
-    
-    // Log the action
-    await logWorkflowAction({
-      workflowId: workflow.id,
-      documentId,
-      collection,
-      stepId,
-      stepName: step.stepName,
-      action,
-      user: user.id,
-      comment,
-      payload,
-    })
-    
-    res.status(200).json({
-      success: true,
-      message: `Workflow ${action} completed successfully`,
-      document: updatedDoc,
-    })
-    
-  } catch (error) {
-    console.error('[Workflow API] Trigger error:', error)
-    res.status(500).json({ error: 'Internal server error' })
+
+const triggerWorkflowHandler: PayloadHandler = async (req) => {
+  const { user, payload } = req
+
+  if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+
+  if (typeof req.json !== 'function') {
+    return new Response(JSON.stringify({ error: 'Request body parser not available' }), { status: 400 })
   }
+  const { documentId, collection, stepId, action, comment } = await req.json()
+
+  console.log('handler req object:', { documentId, collection, stepId, action, comment })
+
+  // Find the document
+  const doc = await payload.findByID({ collection, id: documentId })
+  if (!doc) {
+    return new Response(JSON.stringify({ error: 'Document not found' }), { status: 404 })
+  }
+
+  // Find the workflow
+  const workflows = await payload.find({
+    collection: 'workflows',
+    where: {
+      and: [{ targetCollection: { equals: collection } }, { isActive: { equals: true } }],
+    },
+  })
+
+  if (workflows.docs.length === 0) {
+    return new Response(JSON.stringify({ error: 'Workflow not found' }), { status: 404 })
+  }
+
+  const workflow = workflows.docs[0]
+  const step = workflow.steps?.find((s: any) => s.order.toString() === stepId)
+
+  if (!step) {
+    return new Response(JSON.stringify({ error: 'Step not found' }), { status: 404 })
+  }
+
+  const hasPermission = await checkStepPermission(step, user, payload)
+  if (!hasPermission) {
+    return new Response(JSON.stringify({ error: 'Unauthorized for this step' }), { status: 403 })
+  }
+
+  const updateData: any = {}
+
+  if (action === 'approve') {
+    const nextStep = workflow.steps?.find((s: any) => s.order === step.order + 1)
+    updateData.currentWorkflowStep = nextStep ? nextStep.order.toString() : null
+    updateData.workflowStatus = nextStep ? 'in-progress' : 'completed'
+  } else if (action === 'reject') {
+    updateData.workflowStatus = 'rejected'
+    updateData.currentWorkflowStep = null
+  }
+
+  const updatedDoc = await payload.update({ collection, id: documentId, data: updateData })
+
+  await logWorkflowAction({
+    workflowId: workflow.id,
+    documentId,
+    collection: documentId.toString(),
+    stepId,
+    stepName: step.stepName,
+    action,
+    user: user.id,
+    comment,
+    payload,
+  })
+
+  return new Response(
+    JSON.stringify({
+      success: true,
+      message: `Workflow ${action} processed successfully`,
+      document: updatedDoc,
+    }),
+    { status: 200 },
+  )
 }
 
-const getWorkflowStatusHandler = async (req: any, res: any) => {
+export const getWorkflowStatusHandler = async (req: PayloadRequest): Promise<Response> => {
   try {
-    const { docId } = req.params
-    const { collection } = req.query
+    // ✅ Use routeParams instead of params
+    const routeParams = await req.routeParams
+
+    const { docId, collection } = routeParams as { docId: string; collection: CollectionSlug }
+
+    console.log('[Workflow API] Status request params:', { collection, docId })
+
     const { payload, user } = req
-    
+
     if (!user) {
-      return res.status(401).json({ error: 'Unauthorized' })
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    
-    if (!collection) {
-      return res.status(400).json({ error: 'Collection parameter is required' })
+
+    // Test document lookup
+    try {
+      const doc = await payload.findByID({
+        collection: collection as CollectionSlug,
+        id: docId,
+      }) as Blog
+
+      return Response.json(
+        {
+          success: true,
+          docId,
+          collection,
+          document: {
+            id: doc.id,
+            title: doc.title || 'No title',
+            workflowStatus: doc.workflowStatus || 'not-started',
+            currentWorkflowStep: doc.currentWorkflowStep || null,
+          },
+          timestamp: new Date().toISOString(),
+        },
+        { status: 200 },
+      )
+    } catch (docError) {
+      console.error('[Workflow API] Document not found:', docError)
+      return Response.json(
+        {
+          success: false,
+          error: 'Document not found',
+          docId,
+          collection,
+        },
+        { status: 404 },
+      )
     }
-    
-    // Find the document
-    const doc = await payload.findByID({
-      collection,
-      id: docId,
-    })
-    
-    if (!doc) {
-      return res.status(404).json({ error: 'Document not found' })
-    }
-    
-    // Find applicable workflow
-    const workflows = await payload.find({
-      collection: 'workflows',
-      where: {
-        targetCollection: { equals: collection },
-        isActive: { equals: true },
-      },
-    })
-    
-    if (workflows.docs.length === 0) {
-      return res.status(404).json({ error: 'No active workflow found for this collection' })
-    }
-    
-    const workflow = workflows.docs[0]
-    
-    // Get workflow logs
-    const logs = await payload.find({
-      collection: 'workflowLogs',
-      where: {
-        and: [
-          { documentId: { equals: docId } },
-          { collection: { equals: collection } },
-        ],
-      },
-      sort: '-createdAt',
-    })
-    
-    // Get current step info
-    const currentStepOrder = doc.currentWorkflowStep ? parseInt(doc.currentWorkflowStep) : null
-    const currentStep = currentStepOrder ? workflow.steps.find(s => s.order === currentStepOrder) : null
-    
-    res.status(200).json({
-      documentId: docId,
-      collection,
-      workflowStatus: doc.workflowStatus,
-      currentStep: currentStep ? {
-        id: currentStep.order.toString(),
-        name: currentStep.stepName,
-        type: currentStep.stepType,
-        assignedTo: currentStep.assignedTo,
-      } : null,
-      workflow: {
-        id: workflow.id,
-        name: workflow.name,
-        description: workflow.description,
-        steps: workflow.steps.map(step => ({
-          id: step.order.toString(),
-          name: step.stepName,
-          type: step.stepType,
-          order: step.order,
-          assignedTo: step.assignedTo,
-        })),
-      },
-      logs: logs.docs.map(log => ({
-        id: log.id,
-        stepName: log.stepName,
-        action: log.action,
-        user: log.user,
-        comment: log.comment,
-        createdAt: log.createdAt,
-      })),
-    })
-    
   } catch (error) {
     console.error('[Workflow API] Status error:', error)
-    res.status(500).json({ error: 'Internal server error' })
+    return Response.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

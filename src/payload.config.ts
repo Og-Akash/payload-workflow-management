@@ -1,4 +1,4 @@
-import { buildConfig } from 'payload'
+import { buildConfig, PayloadRequest } from 'payload'
 import { postgresAdapter } from '@payloadcms/db-postgres'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -27,13 +27,7 @@ export default buildConfig({
       // global components go here
     },
   },
-  collections: [
-    Users,
-    Workflows,
-    WorkflowLogs,
-    Blog,
-    Contract,
-  ],
+  collections: [Users, Workflows, WorkflowLogs, Blog, Contract],
   editor: lexicalEditor({}),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
