@@ -1,18 +1,9 @@
-import { config } from 'dotenv'
-import payloadConfig from '../payload.config'
-import { getPayload } from 'payload'
-
-// Load environment variables first
-config()
-
-// Verify secret is loaded
-if (!process.env.PAYLOAD_SECRET) {
-  console.error('❌ PAYLOAD_SECRET environment variable is not set!')
-  process.exit(1)
-}
+import 'dotenv/config';
+import payload from 'payload';
+import config from '@/payload.config';
 
 const seed = async (): Promise<void> => {
-  const payload = await getPayload({ config: payloadConfig })
+  await payload.init({config})
 
   console.log('🌱 Seeding database...')
 
@@ -239,6 +230,9 @@ const seed = async (): Promise<void> => {
     console.log('👑 Admin: admin@example.com / admin123')
     console.log('👥 Manager: manager@example.com / manager123')
     console.log('📝 Reviewer: reviewer@example.com / reviewer123')
+
+    process.exit(0);
+
   } catch (error) {
     console.error('❌ Error during seeding:', error)
   }

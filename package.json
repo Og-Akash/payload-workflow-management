@@ -16,7 +16,8 @@
     "test": "pnpm run test:int && pnpm run test:e2e",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --no-experimental-strip-types\" pnpm exec playwright test",
     "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts",
-     "seed": "cross-env NODE_ENV=development tsx src/scripts/seed.ts"
+    "remove:all": "cross-env PAYLOAD_SEED=true PAYLOAD_DROP_DATABASE=true PAYLOAD_CONFIG_PATH=src/payload.config.ts",
+    "seed": "cross-env tsx ./src/scripts/seed.ts"
   },
   "dependencies": {
     "@payloadcms/next": "3.48.0",
