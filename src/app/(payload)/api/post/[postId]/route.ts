@@ -4,17 +4,17 @@ import config from '@payload-config'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ blogId: string }> },
+  { params }: { params: Promise<{ postId: string }> },
 ) {
-  const { blogId } = await params
+  const { postId } = await params
   const searchParams = req.nextUrl.searchParams
   const collection = searchParams.get('collecton') as CollectionSlug
   const payloadConfig = await config
   const payload = await getPayload({ config: payloadConfig })
 
   const matchedBlog = await payload.findByID({
-    collection: collection || 'blog',
-    id: blogId,
+    collection: collection || 'post',
+    id: postId,
   })
 
   return NextResponse.json(matchedBlog)

@@ -1,44 +1,31 @@
+// src/components/WorkflowTab.tsx (or WorkflowField.tsx)
 'use client'
 import React from 'react'
 import { useDocumentInfo } from '@payloadcms/ui/providers/DocumentInfo'
+import { usePayloadAPI } from '@payloadcms/ui'
 
 export const WorkflowTab = () => {
-  // ✅ Use Payload's hook to get document info instead of props
+  // ✅ Get document info
   const { id: docId, collectionSlug } = useDocumentInfo()
-  
-  const [workflowData, setWorkflowData] = React.useState<any>(null)
-  const [loading, setLoading] = React.useState(true)
+
+  // ✅ Use usePayloadAPI to fetch workflow data
+  const [{ data: workflowData, isLoading: loading, isError }] = usePayloadAPI(
+    docId ? `/api/workflows/status?collection=${collectionSlug}&docId=${docId}` : '',
+    { initialParams: { depth: 2 } } // Adjust depth if needed for relationships
+  )
+
   const [comment, setComment] = React.useState('')
   const [processing, setProcessing] = React.useState(false)
 
   React.useEffect(() => {
-    if (docId && collectionSlug) {
-      fetchWorkflowData()
+    if (isError) {
+      console.error('Failed to fetch workflow data:')
     }
-  }, [docId, collectionSlug])
-
-  const fetchWorkflowData = async () => {
-    if (!docId || !collectionSlug) return
-    
-    try {
-      setLoading(true)
-      const response = await fetch(`/api/detail/status/${docId}`)
-      
-      if (response.ok) {
-        const data = await response.json()
-        console.log("req data: ",data)
-        setWorkflowData(data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch workflow data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [isError])
 
   const handleWorkflowAction = async (action: string, stepId: string) => {
     if (!docId || !collectionSlug) return
-    
+
     try {
       setProcessing(true)
       const response = await fetch('/api/workflows/trigger', {
@@ -56,13 +43,12 @@ export const WorkflowTab = () => {
       })
 
       if (response.ok) {
-        await fetchWorkflowData()
         setComment('')
-        // Refresh the page to show updated document status
+        // Optionally refresh the page
         window.location.reload()
       } else {
-        const error = await response.json()
-        alert(`Error: ${error.error || 'Failed to process workflow action'}`)
+        const errorData = await response.json()
+        alert(`Error: ${errorData.error || 'Failed to process workflow action'}`)
       }
     } catch (error) {
       console.error('Workflow action failed:', error)
@@ -72,7 +58,7 @@ export const WorkflowTab = () => {
     }
   }
 
-  // Handle case when document isn't saved yet
+  // Handle unsaved document
   if (!docId) {
     return (
       <div style={styles.container}>
@@ -91,17 +77,16 @@ export const WorkflowTab = () => {
     )
   }
 
-  if (!workflowData) {
+  if (isError || !workflowData) {
     return (
       <div style={styles.container}>
         <div style={styles.message}>
-          ℹ️ No active workflow found for this collection.
+          ℹ️ No active workflow found or error loading data.
         </div>
       </div>
     )
   }
-
-  return (
+return (
     <div style={styles.container}>
       <div style={styles.header}>
         <h3 style={styles.title}>🔄 {workflowData.workflow.name}</h3>
@@ -270,35 +255,35 @@ const styles = {
     padding: '20px',
     backgroundColor: '#f8f9fa',
     borderRadius: '8px',
-    fontFamily: 'system-ui, -apple-system, sans-serif'
+    fontFamily: 'system-ui, -apple-system, sans-serif',
   },
   header: {
-    marginBottom: '24px'
+    marginBottom: '24px',
   },
   title: {
     fontSize: '18px',
     fontWeight: '600',
     color: '#1a1a1a',
     marginBottom: '8px',
-    margin: '0 0 8px 0'
+    margin: '0 0 8px 0',
   },
   description: {
     color: '#666',
     fontSize: '14px',
-    margin: 0
+    margin: 0,
   },
   message: {
     textAlign: 'center' as const,
     padding: '40px',
     color: '#666',
-    fontSize: '16px'
+    fontSize: '16px',
   },
   currentStatus: {
     backgroundColor: 'white',
     border: '1px solid #e0e0e0',
     borderRadius: '6px',
     padding: '16px',
-    marginBottom: '24px'
+    marginBottom: '24px',
   },
   statusBadge: {
     display: 'inline-block',
@@ -306,31 +291,31 @@ const styles = {
     borderRadius: '4px',
     fontSize: '12px',
     fontWeight: '500',
-    marginBottom: '8px'
+    marginBottom: '8px',
   },
   currentStep: {
     fontSize: '16px',
     fontWeight: '500',
-    color: '#1a1a1a'
+    color: '#1a1a1a',
   },
   stepType: {
     color: '#666',
     fontSize: '14px',
-    marginTop: '4px'
+    marginTop: '4px',
   },
   workflowActions: {
     backgroundColor: 'white',
     border: '1px solid #e0e0e0',
     borderRadius: '6px',
     padding: '16px',
-    marginBottom: '24px'
+    marginBottom: '24px',
   },
   actionsTitle: {
     fontSize: '16px',
     fontWeight: '500',
     marginBottom: '12px',
     color: '#1a1a1a',
-    margin: '0 0 12px 0'
+    margin: '0 0 12px 0',
   },
   commentInput: {
     width: '100%',
@@ -341,12 +326,12 @@ const styles = {
     fontSize: '14px',
     marginBottom: '12px',
     resize: 'vertical' as const,
-    fontFamily: 'inherit'
+    fontFamily: 'inherit',
   },
   actionButtons: {
     display: 'flex',
     gap: '12px',
-    flexWrap: 'wrap' as const
+    flexWrap: 'wrap' as const,
   },
   actionButton: {
     padding: '8px 16px',
@@ -355,45 +340,45 @@ const styles = {
     cursor: 'pointer',
     fontSize: '14px',
     fontWeight: '500',
-    transition: 'background-color 0.2s'
+    transition: 'background-color 0.2s',
   },
   approveBtn: {
     backgroundColor: '#4caf50',
-    color: 'white'
+    color: 'white',
   },
   rejectBtn: {
     backgroundColor: '#f44336',
-    color: 'white'
+    color: 'white',
   },
   commentBtn: {
     backgroundColor: '#2196f3',
-    color: 'white'
+    color: 'white',
   },
   workflowProgress: {
     backgroundColor: 'white',
     border: '1px solid #e0e0e0',
     borderRadius: '6px',
     padding: '16px',
-    marginBottom: '24px'
+    marginBottom: '24px',
   },
   progressTitle: {
     fontSize: '16px',
     fontWeight: '500',
     marginBottom: '16px',
     color: '#1a1a1a',
-    margin: '0 0 16px 0'
+    margin: '0 0 16px 0',
   },
   progressSteps: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '12px'
+    gap: '12px',
   },
   progressStep: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
     padding: '8px',
-    borderRadius: '4px'
+    borderRadius: '4px',
   },
   stepIndicator: {
     width: '24px',
@@ -404,60 +389,60 @@ const styles = {
     justifyContent: 'center',
     fontSize: '12px',
     fontWeight: '600',
-    color: 'white'
+    color: 'white',
   },
   stepInfo: {
-    flex: 1
+    flex: 1,
   },
   stepName: {
     fontWeight: '500',
-    color: '#1a1a1a'
+    color: '#1a1a1a',
   },
   stepAssigned: {
     fontSize: '12px',
     color: '#666',
-    marginTop: '2px'
+    marginTop: '2px',
   },
   workflowLogs: {
     backgroundColor: 'white',
     border: '1px solid #e0e0e0',
     borderRadius: '6px',
-    padding: '16px'
+    padding: '16px',
   },
   logsTitle: {
     fontSize: '16px',
     fontWeight: '500',
     marginBottom: '16px',
     color: '#1a1a1a',
-    margin: '0 0 16px 0'
+    margin: '0 0 16px 0',
   },
   emptyLogs: {
     color: '#666',
     fontStyle: 'italic',
-    margin: 0
+    margin: 0,
   },
   logEntry: {
     borderBottom: '1px solid #f0f0f0',
-    padding: '12px 0'
+    padding: '12px 0',
   },
   logHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '4px'
+    marginBottom: '4px',
   },
   logAction: {
     fontWeight: '500',
-    color: '#1a1a1a'
+    color: '#1a1a1a',
   },
   logTime: {
     fontSize: '12px',
-    color: '#666'
+    color: '#666',
   },
   logStep: {
     fontSize: '14px',
     color: '#666',
-    marginBottom: '4px'
+    marginBottom: '4px',
   },
   logComment: {
     fontSize: '14px',
@@ -466,8 +451,8 @@ const styles = {
     backgroundColor: '#f8f9fa',
     padding: '8px',
     borderRadius: '4px',
-    marginTop: '8px'
-  }
+    marginTop: '8px',
+  },
 } as const
 
 export default WorkflowTab

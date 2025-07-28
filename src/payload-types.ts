@@ -70,7 +70,7 @@ export interface Config {
     users: User;
     workflows: Workflow;
     workflowLogs: WorkflowLog;
-    blog: Blog;
+    post: Post;
     contracts: Contract;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -81,7 +81,7 @@ export interface Config {
     users: UsersSelect<false> | UsersSelect<true>;
     workflows: WorkflowsSelect<false> | WorkflowsSelect<true>;
     workflowLogs: WorkflowLogsSelect<false> | WorkflowLogsSelect<true>;
-    blog: BlogSelect<false> | BlogSelect<true>;
+    post: PostSelect<false> | PostSelect<true>;
     contracts: ContractsSelect<false> | ContractsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -152,7 +152,7 @@ export interface User {
 export interface Workflow {
   id: number;
   /**
-   * Name of the workflow (e.g., "Blog Approval Process")
+   * Name of the workflow (e.g., "Post Approval Process")
    */
   name: string;
   /**
@@ -160,7 +160,7 @@ export interface Workflow {
    */
   description?: string | null;
   /**
-   * Collection slug this workflow applies to (e.g., "blog", "contracts")
+   * Collection slug this workflow applies to (e.g., "post", "contracts")
    */
   targetCollection: string;
   /**
@@ -247,9 +247,9 @@ export interface WorkflowLog {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "blog".
+ * via the `definition` "post".
  */
-export interface Blog {
+export interface Post {
   id: number;
   title: string;
   content: {
@@ -318,8 +318,8 @@ export interface PayloadLockedDocument {
         value: number | WorkflowLog;
       } | null)
     | ({
-        relationTo: 'blog';
-        value: number | Blog;
+        relationTo: 'post';
+        value: number | Post;
       } | null)
     | ({
         relationTo: 'contracts';
@@ -447,9 +447,9 @@ export interface WorkflowLogsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "blog_select".
+ * via the `definition` "post_select".
  */
-export interface BlogSelect<T extends boolean = true> {
+export interface PostSelect<T extends boolean = true> {
   title?: T;
   content?: T;
   priority?: T;

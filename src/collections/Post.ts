@@ -1,17 +1,24 @@
 import type { CollectionConfig, PayloadRequest } from 'payload'
 
-export const Blog: CollectionConfig = {
-  slug: 'blog',
+export const Post: CollectionConfig = {
+  slug: 'post',
   admin: {
     useAsTitle: 'title',
-    components: {
-      beforeListTable: ['/components/WorkflowTab'],
-    },
   },
   access: {
     read: () => true,
   },
   fields: [
+    {
+      name: 'workflowTab',
+      type: 'ui',
+      admin: {
+        components: {
+          Field: './components/WorkflowTab',  
+        },
+        position: 'sidebar',
+      },
+    },
     {
       name: 'title',
       type: 'text',

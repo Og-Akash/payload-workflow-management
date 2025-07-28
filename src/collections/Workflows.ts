@@ -23,7 +23,7 @@ export const Workflows: CollectionConfig = {
       type: 'text',
       required: true,
       admin: {
-        description: 'Name of the workflow (e.g., "Blog Approval Process")',
+        description: 'Name of the workflow (e.g., "Post Approval Process")',
       },
     },
     {
@@ -38,7 +38,7 @@ export const Workflows: CollectionConfig = {
       type: 'text',
       required: true,
       admin: {
-        description: 'Collection slug this workflow applies to (e.g., "blog", "contracts")',
+        description: 'Collection slug this workflow applies to (e.g., "post", "contracts")',
       },
     },
     {

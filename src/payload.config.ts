@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url'
 import { Users } from './collections/Users'
 import { Workflows } from './collections/Workflows'
 import { WorkflowLogs } from './collections/WorkflowLogs'
-import { Blog } from './collections/Blog'
+import { Post } from './collections/Post'
 import { Contract } from './collections/Contract'
 
 // Import plugins
@@ -27,7 +27,7 @@ export default buildConfig({
       // global components go here
     },
   },
-  collections: [Users, Workflows, WorkflowLogs, Blog, Contract],
+  collections: [Users, Workflows, WorkflowLogs, Post, Contract],
   editor: lexicalEditor({}),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
@@ -40,7 +40,7 @@ export default buildConfig({
   }),
   plugins: [
     workflowEngine({
-      collections: ['blog', 'contracts'], // Enable workflows for these collections
+      collections: ['post', 'contracts'], // Enable workflows for these collections
     }),
   ],
 })

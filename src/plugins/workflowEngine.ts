@@ -1,4 +1,4 @@
-import { Blog, User, WorkflowLog } from '@/payload-types'
+import { Post, User } from '@/payload-types'
 import type {
   Config,
   Plugin,
@@ -21,7 +21,7 @@ export const workflowEngine = (options: WorkflowEngineOptions = {}): Plugin => {
       collections: config.collections?.map((collection) => {
         const isTarget =
           options.collections?.includes(collection.slug) ||
-          ['blog', 'contracts'].includes(collection.slug)
+          ['post', 'contracts'].includes(collection.slug)
         console.log('isTarget', isTarget)
 
         if (!isTarget) return collection
@@ -271,8 +271,8 @@ function getCollectionSpecificAction(
 ): { action: string; stepName: string; comment?: string } | null {
   
   switch (collectionSlug) {
-    case 'blog':
-      return getBlogWorkflowAction(doc, previousDoc)
+    case 'post':
+      return getPostWorkflowAction(doc, previousDoc)
     
     case 'contracts':
       return getContractWorkflowAction(doc, previousDoc)
@@ -282,41 +282,41 @@ function getCollectionSpecificAction(
   }
 }
 
-// ✅ Blog-specific workflow action detection
-function getBlogWorkflowAction(
+// ✅ Post-specific workflow action detection
+function getPostWorkflowAction(
   doc: any, 
   previousDoc: any
 ): { action: string; stepName: string; comment?: string } | null {
   
-  // Check blog status changes
+  // Check post status changes
   if (doc.status !== previousDoc.status) {
     switch (doc.status) {
       case 'published':
         return {
           action: 'approved',
-          stepName: 'Blog Publication',
-          comment: `Blog status changed from '${previousDoc.status}' to 'published'`
+          stepName: 'Post Publication',
+          comment: `Post status changed from '${previousDoc.status}' to 'published'`
         }
       
       case 'rejected':
         return {
           action: 'rejected', 
-          stepName: 'Blog Review',
-          comment: `Blog rejected - status changed from '${previousDoc.status}' to 'rejected'`
+          stepName: 'Post Review',
+          comment: `Post rejected - status changed from '${previousDoc.status}' to 'rejected'`
         }
       
       case 'in-review':
         return {
           action: 'started',
-          stepName: 'Blog Review Process',
-          comment: `Blog submitted for review - status changed to 'in-review'`
+          stepName: 'Post Review Process',
+          comment: `Post submitted for review - status changed to 'in-review'`
         }
       
       case 'draft':
         return {
           action: 'commented',
-          stepName: 'Blog Draft',
-          comment: `Blog moved back to draft status`
+          stepName: 'Post Draft',
+          comment: `Post moved back to draft status`
         }
     }
   }
@@ -327,7 +327,7 @@ function getBlogWorkflowAction(
       return {
         action: 'escalated',
         stepName: 'Priority Escalation',
-        comment: `Blog priority escalated to '${doc.priority}'`
+        comment: `Post priority escalated to '${doc.priority}'`
       }
     }
   }
@@ -598,7 +598,7 @@ export const getWorkflowStatusHandler = async (req: PayloadRequest): Promise<Res
       const doc = await payload.findByID({
         collection: collection as CollectionSlug,
         id: docId,
-      }) as Blog
+      }) as Post
 
       return Response.json(
         {

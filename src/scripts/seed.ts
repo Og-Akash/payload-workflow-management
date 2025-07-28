@@ -47,13 +47,13 @@ const seed = async (): Promise<void> => {
 
     console.log('✅ Created manager user:', managerUser.email)
 
-    // Create Blog workflow
-    const blogWorkflow = await payload.create({
+    // Create post workflow
+    const postWorkflow = await payload.create({
       collection: 'workflows',
       data: {
-        name: 'Blog Content Approval',
-        description: 'Standard approval process for blog posts',
-        targetCollection: 'blog',
+        name: 'Post Content Approval',
+        description: 'Standard approval process for posts',
+        targetCollection: 'post',
         isActive: true,
         steps: [
           {
@@ -105,7 +105,7 @@ const seed = async (): Promise<void> => {
       },
     })
 
-    console.log('✅ Created blog workflow:', blogWorkflow.name)
+    console.log('✅ Created post workflow:', postWorkflow.name)
 
     // Create Contract workflow
     const contractWorkflow = await payload.create({
@@ -167,9 +167,9 @@ const seed = async (): Promise<void> => {
 
     console.log('✅ Created contract workflow:', contractWorkflow.name)
 
-    // Create sample blog post
-    const sampleBlog = await payload.create({
-      collection: 'blog',
+    // Create sample post post
+    const samplepost = await payload.create({
+      collection: 'post',
       data: {
         title: 'Getting Started with Our New System',
         content: {
@@ -182,7 +182,7 @@ const seed = async (): Promise<void> => {
                     format: 0,
                     mode: 'normal',
                     style: '',
-                    text: 'This is a sample blog post to demonstrate the workflow system.',
+                    text: 'This is a sample post post to demonstrate the workflow system.',
                     type: 'text',
                     version: 1,
                   },
@@ -207,7 +207,7 @@ const seed = async (): Promise<void> => {
       },
     })
 
-    console.log('✅ Created sample blog post:', sampleBlog.title)
+    console.log('✅ Created sample post post:', samplepost.title)
 
     // Create sample contract
     const sampleContract = await payload.create({
