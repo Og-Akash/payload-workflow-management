@@ -1,4 +1,4 @@
-import type { CollectionConfig, PayloadRequest } from 'payload'
+import type { CollectionConfig } from 'payload'
 
 export const Post: CollectionConfig = {
   slug: 'post',
@@ -9,16 +9,16 @@ export const Post: CollectionConfig = {
     read: () => true,
   },
   fields: [
-    {
-      name: 'workflowTab',
-      type: 'ui',
-      admin: {
-        components: {
-          Field: './components/WorkflowTab',  
-        },
-        position: 'sidebar',
+  {
+    name: 'workflowTab',
+    type: 'ui',
+    admin: {
+      components: {
+        Field: './components/WorkflowTab',  
       },
+      position: 'sidebar',
     },
+  },
     {
       name: 'title',
       type: 'text',

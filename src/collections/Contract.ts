@@ -1,4 +1,3 @@
-import payloadConfig from '@/payload.config'
 import type { CollectionConfig } from 'payload'
 
 
@@ -7,13 +6,22 @@ export const Contract: CollectionConfig = {
   admin: {
     useAsTitle: 'title',
     components: {
-      // beforeListTable: ['./components/WorkflowTab.tsx'],
     },
   },
   access: {
     read: () => true,
   },
   fields: [
+    {
+      name: 'workflowTab',
+      type: 'ui',
+      admin: {
+        components: {
+          Field: './components/WorkflowTab',  
+        },
+        position: 'sidebar',
+      },
+    },
     {
       name: 'title',
       type: 'text',
