@@ -20,18 +20,19 @@
     "seed": "cross-env tsx ./src/scripts/seed.ts"
   },
   "dependencies": {
+    "@payloadcms/db-postgres": "3.48.0",
     "@payloadcms/next": "3.48.0",
     "@payloadcms/payload-cloud": "3.48.0",
     "@payloadcms/richtext-lexical": "3.48.0",
     "@payloadcms/ui": "3.48.0",
     "cross-env": "^7.0.3",
     "dotenv": "16.4.7",
+    "framer-motion": "^12.23.12",
     "graphql": "^16.8.1",
     "next": "15.3.2",
     "payload": "3.48.0",
     "react": "19.1.0",
-    "sharp": "0.34.2",
-    "@payloadcms/db-postgres": "3.48.0"
+    "sharp": "0.34.2"
   },
   "devDependencies": {
     "@playwright/test": "1.50.0",
